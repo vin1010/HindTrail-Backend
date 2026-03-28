@@ -25,7 +25,7 @@ workspaceRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
 
     res.json({
       activeCompanyId: companyId || memberships[0]?.companyId || null,
-      companies: memberships.map((m) => ({
+      companies: memberships.map((m: any) => ({
         id: m.company.id, name: m.company.name, role: m.role, type: m.company.type,
       })),
       projects,

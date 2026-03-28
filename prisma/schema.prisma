@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -14,7 +13,7 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   fullName  String
-  status    String   @default("active") // active, disabled
+  status    String   @default("active")
   createdAt DateTime @default(now())
 
   memberships   CompanyUser[]
@@ -27,7 +26,7 @@ model User {
 model Company {
   id        String   @id @default(uuid())
   name      String
-  type      String   @default("contractor") // client, contractor, independent
+  type      String   @default("contractor")
   createdAt DateTime @default(now())
 
   members    CompanyUser[]
@@ -41,8 +40,8 @@ model CompanyUser {
   id        String   @id @default(uuid())
   userId    String
   companyId String
-  role      String   @default("member") // admin, pm, member, viewer
-  status    String   @default("active") // active, invited, disabled
+  role      String   @default("member")
+  status    String   @default("active")
 
   user    User    @relation(fields: [userId], references: [id])
   company Company @relation(fields: [companyId], references: [id])
@@ -65,17 +64,17 @@ model UserLastContext {
 // ─── Projects & Work Packages ──────────────────────────────────
 
 model Project {
-  id          String   @id @default(uuid())
-  name        String
-  code        String
-  clientName  String
+  id              String   @id @default(uuid())
+  name            String
+  code            String
+  clientName      String
   clientCompanyId String?
-  location    String
-  startDate   String
-  endDate     String
-  status      String   @default("Active") // Active, Closed, On Hold
-  description String   @default("")
-  createdAt   DateTime @default(now())
+  location        String
+  startDate       String
+  endDate         String
+  status          String   @default("Active")
+  description     String   @default("")
+  createdAt       DateTime @default(now())
 
   clientCompany Company?      @relation("ClientCompany", fields: [clientCompanyId], references: [id])
   packages      WorkPackage[]
@@ -118,9 +117,9 @@ model Document {
   id         String   @id @default(uuid())
   packageId  String
   title      String
-  type       String   // Procedure, Method Statement, Certificate, Drawing, Report, Other
+  type       String
   revision   String
-  status     String   @default("Draft") // Draft, Submitted, Approved for Use, Superseded
+  status     String   @default("Draft")
   uploadedBy String
   uploadDate String
   isCurrent  Boolean  @default(true)
@@ -133,14 +132,14 @@ model Document {
 }
 
 model Inspection {
-  id          String  @id @default(uuid())
+  id          String   @id @default(uuid())
   packageId   String
   type        String
   linkedDocId String?
   date        String
   inspector   String
-  result      String  @default("Open") // Open, Passed, Failed
-  notes       String  @default("")
+  result      String   @default("Open")
+  notes       String   @default("")
   createdAt   DateTime @default(now())
 
   package WorkPackage @relation(fields: [packageId], references: [id])
@@ -149,17 +148,17 @@ model Inspection {
 }
 
 model Issue {
-  id                String  @id @default(uuid())
-  packageId         String
-  title             String
-  description       String  @default("")
-  severity          String  @default("Major") // Critical, Major, Minor
+  id                 String   @id @default(uuid())
+  packageId          String
+  title              String
+  description        String   @default("")
+  severity           String   @default("Major")
   linkedInspectionId String?
-  owner             String
-  dueDate           String  @default("")
-  status            String  @default("Open") // Open, In Progress, Awaiting Review, Closed
-  closureNotes      String  @default("")
-  createdAt         DateTime @default(now())
+  owner              String
+  dueDate            String   @default("")
+  status             String   @default("Open")
+  closureNotes       String   @default("")
+  createdAt          DateTime @default(now())
 
   package WorkPackage @relation(fields: [packageId], references: [id])
 
@@ -167,16 +166,16 @@ model Issue {
 }
 
 model Approval {
-  id            String  @id @default(uuid())
+  id            String   @id @default(uuid())
   packageId     String
-  objectType    String  // Document, Inspection, Issue, Package
+  objectType    String
   objectLabel   String
   submittedBy   String
   submittedDate String
   approver      String
-  decision      String  @default("Pending") // Pending, Approved, Rejected
-  decisionDate  String  @default("")
-  comments      String  @default("")
+  decision      String   @default("Pending")
+  decisionDate  String   @default("")
+  comments      String   @default("")
   createdAt     DateTime @default(now())
 
   package WorkPackage @relation(fields: [packageId], references: [id])
@@ -187,15 +186,15 @@ model Approval {
 // ─── Audit & Permissions ───────────────────────────────────────
 
 model Activity {
-  id         String   @id @default(uuid())
-  packageId  String?
-  userId     String?
-  user       String   @default("")
-  company    String   @default("")
-  actionType String
-  objectType String
+  id          String   @id @default(uuid())
+  packageId   String?
+  userId      String?
+  user        String   @default("")
+  company     String   @default("")
+  actionType  String
+  objectType  String
   objectLabel String
-  timestamp  DateTime @default(now())
+  timestamp   DateTime @default(now())
 
   package    WorkPackage? @relation(fields: [packageId], references: [id])
   userRef    User?        @relation(fields: [userId], references: [id])
@@ -209,7 +208,7 @@ model PackageMember {
   name      String
   company   String
   email     String
-  role      String @default("Viewer") // Owner, Contributor, Approver, Viewer
+  role      String @default("Viewer")
 
   package WorkPackage @relation(fields: [packageId], references: [id])
 

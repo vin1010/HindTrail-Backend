@@ -29,7 +29,7 @@ authRouter.post("/login", async (req, res) => {
 
     const token = signToken(user.id);
 
-    const mapped = memberships.map((m) => ({
+    const mapped = memberships.map((m: any) => ({
       id: m.company.id,
       name: m.company.name,
       role: m.role,
