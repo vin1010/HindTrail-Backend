@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Identity & Access ─────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  fullName  String
+  status    String   @default("active") // active, disabled
+  createdAt DateTime @default(now())
+
+  memberships   CompanyUser[]
+  lastContext    UserLastContext?
+  activities     Activity[]
+
+  @@map("users")
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   @default("contractor") // client, contractor, independent
+  createdAt DateTime @default(now())
+
+  members    CompanyUser[]
+  packages   WorkPackage[]
+  projects   Project[]     @relation("ClientCompany")
+
+  @@map("companies")
+}
+
+model CompanyUser {
+  id        String   @id @default(uuid())
+  userId    String
+  companyId String
+  role      String   @default("member") // admin, pm, member, viewer
+  status    String   @default("active") // active, invited, disabled
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([userId, companyId])
+  @@map("company_users")
+}
+
+model UserLastContext {
+  userId        String  @id
+  lastCompanyId String?
+  lastProjectId String?
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("user_last_context")
+}
+
+// ─── Projects & Work Packages ──────────────────────────────────
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  code        String
+  clientName  String
+  clientCompanyId String?
+  location    String
+  startDate   String
+  endDate     String
+  status      String   @default("Active") // Active, Closed, On Hold
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  clientCompany Company?      @relation("ClientCompany", fields: [clientCompanyId], references: [id])
+  packages      WorkPackage[]
+
+  @@map("projects")
+}
+
+model WorkPackage {
+  id             String   @id @default(uuid())
+  projectId      String
+  parentId       String?
+  name           String
+  code           String
+  ownerCompanyId String?
+  ownerCompany   String   @default("")
+  responsible    String   @default("")
+  dueDate        String   @default("")
+  status         String   @default("Not Started")
+  description    String   @default("")
+  createdAt      DateTime @default(now())
+
+  project       Project       @relation(fields: [projectId], references: [id])
+  parent        WorkPackage?  @relation("PackageTree", fields: [parentId], references: [id])
+  children      WorkPackage[] @relation("PackageTree")
+  company       Company?      @relation(fields: [ownerCompanyId], references: [id])
+
+  documents     Document[]
+  inspections   Inspection[]
+  issues        Issue[]
+  approvals     Approval[]
+  activities    Activity[]
+  members       PackageMember[]
+
+  @@map("work_packages")
+}
+
+// ─── Evidence Records ──────────────────────────────────────────
+
+model Document {
+  id         String   @id @default(uuid())
+  packageId  String
+  title      String
+  type       String   // Procedure, Method Statement, Certificate, Drawing, Report, Other
+  revision   String
+  status     String   @default("Draft") // Draft, Submitted, Approved for Use, Superseded
+  uploadedBy String
+  uploadDate String
+  isCurrent  Boolean  @default(true)
+  notes      String   @default("")
+  createdAt  DateTime @default(now())
+
+  package WorkPackage @relation(fields: [packageId], references: [id])
+
+  @@map("documents")
+}
+
+model Inspection {
+  id          String  @id @default(uuid())
+  packageId   String
+  type        String
+  linkedDocId String?
+  date        String
+  inspector   String
+  result      String  @default("Open") // Open, Passed, Failed
+  notes       String  @default("")
+  createdAt   DateTime @default(now())
+
+  package WorkPackage @relation(fields: [packageId], references: [id])
+
+  @@map("inspections")
+}
+
+model Issue {
+  id                String  @id @default(uuid())
+  packageId         String
+  title             String
+  description       String  @default("")
+  severity          String  @default("Major") // Critical, Major, Minor
+  linkedInspectionId String?
+  owner             String
+  dueDate           String  @default("")
+  status            String  @default("Open") // Open, In Progress, Awaiting Review, Closed
+  closureNotes      String  @default("")
+  createdAt         DateTime @default(now())
+
+  package WorkPackage @relation(fields: [packageId], references: [id])
+
+  @@map("issues")
+}
+
+model Approval {
+  id            String  @id @default(uuid())
+  packageId     String
+  objectType    String  // Document, Inspection, Issue, Package
+  objectLabel   String
+  submittedBy   String
+  submittedDate String
+  approver      String
+  decision      String  @default("Pending") // Pending, Approved, Rejected
+  decisionDate  String  @default("")
+  comments      String  @default("")
+  createdAt     DateTime @default(now())
+
+  package WorkPackage @relation(fields: [packageId], references: [id])
+
+  @@map("approvals")
+}
+
+// ─── Audit & Permissions ───────────────────────────────────────
+
+model Activity {
+  id         String   @id @default(uuid())
+  packageId  String?
+  userId     String?
+  user       String   @default("")
+  company    String   @default("")
+  actionType String
+  objectType String
+  objectLabel String
+  timestamp  DateTime @default(now())
+
+  package    WorkPackage? @relation(fields: [packageId], references: [id])
+  userRef    User?        @relation(fields: [userId], references: [id])
+
+  @@map("activities")
+}
+
+model PackageMember {
+  id        String @id @default(uuid())
+  packageId String
+  name      String
+  company   String
+  email     String
+  role      String @default("Viewer") // Owner, Contributor, Approver, Viewer
+
+  package WorkPackage @relation(fields: [packageId], references: [id])
+
+  @@map("package_members")
+}
