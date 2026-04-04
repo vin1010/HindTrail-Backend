@@ -26,8 +26,9 @@ app.get("/", (_req, res) => {
   res.json({ status: "ok", service: "HindTrail API" });
 });
 
-// Temporary seed endpoint — remove after use
-app.post("/admin/seed", async (req, res) => {
+// REMOVED: temp seed endpoint
+
+if (false) app.post("/admin/seed", async (req, res) => {
   if (req.headers["x-seed-token"] !== "hindtrail-seed-2026") {
     res.status(403).json({ error: "Forbidden" }); return;
   }
