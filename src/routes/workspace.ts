@@ -18,9 +18,20 @@ workspaceRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
     const openIssues = await prisma.issue.count({ where: { NOT: { status: "Closed" } } });
     const pendingApprovals = await prisma.approval.count({ where: { decision: "Pending" } });
     const inProgressPkgs = await prisma.workPackage.count({ where: { status: "In Progress" } });
+
+    const [totalPackages, closedPackages, totalDocs, pkgByStatus] = await Promise.all([
+      prisma.workPackage.count(),
+      prisma.workPackage.count({ where: { status: "Closed" } }),
+      prisma.document.count(),
+      prisma.workPackage.groupBy({ by: ["status"], _count: { id: true } }),
+    ]);
+    const packagesByStatus = Object.fromEntries(
+      pkgByStatus.map((r: any) => [r.status, r._count.id])
+    );
+
     const recentActivity = await prisma.activity.findMany({
       orderBy: { timestamp: "desc" },
-      take: 10,
+      take: 20,
     });
 
     res.json({
@@ -29,7 +40,15 @@ workspaceRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
         id: m.company.id, name: m.company.name, role: m.role, type: m.company.type,
       })),
       projects,
-      stats: { openIssues, pendingApprovals, inProgressPkgs },
+      stats: {
+        openIssues,
+        pendingApprovals,
+        inProgressPkgs,
+        totalPackages,
+        closedPackages,
+        totalDocs,
+        packagesByStatus,
+      },
       recentActivity,
     });
   } catch (err) {

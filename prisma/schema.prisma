@@ -19,6 +19,7 @@ model User {
   memberships   CompanyUser[]
   lastContext    UserLastContext?
   activities     Activity[]
+  comments       Comment[]
 
   @@map("users")
 }
@@ -107,6 +108,7 @@ model WorkPackage {
   approvals     Approval[]
   activities    Activity[]
   members       PackageMember[]
+  comments      Comment[]
 
   @@map("work_packages")
 }
@@ -213,4 +215,17 @@ model PackageMember {
   package WorkPackage @relation(fields: [packageId], references: [id])
 
   @@map("package_members")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  packageId String
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+
+  package WorkPackage @relation(fields: [packageId], references: [id])
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@map("comments")
 }
