@@ -126,6 +126,7 @@ model Document {
   uploadDate String
   isCurrent  Boolean  @default(true)
   notes      String   @default("")
+  fileUrl    String?
   createdAt  DateTime @default(now())
 
   package WorkPackage @relation(fields: [packageId], references: [id])

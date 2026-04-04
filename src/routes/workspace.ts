@@ -1,8 +1,33 @@
 import { Router } from "express";
 import { prisma } from "../db";
 import { authMiddleware, type AuthRequest } from "../middleware/auth";
+import { queryStr } from "../utils";
 
 export const workspaceRouter = Router();
+
+// Returns pending approvals for the given approver name or all, with package/project context
+workspaceRouter.get("/notifications", authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const approverName = queryStr(req.query.approver);
+    const where = approverName
+      ? { decision: "Pending", approver: approverName }
+      : { decision: "Pending" };
+
+    const pending = await prisma.approval.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      include: {
+        package: { select: { id: true, name: true, code: true, projectId: true } },
+      },
+    });
+
+    res.json(pending);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
 
 workspaceRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
   try {

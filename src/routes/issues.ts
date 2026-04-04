@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { authMiddleware } from "../middleware/auth";
 import { queryStr, paramStr } from "../utils";
+import { syncPackageStatus } from "../syncStatus";
 
 export const issuesRouter = Router();
 
@@ -24,6 +25,7 @@ issuesRouter.post("/", authMiddleware, async (req, res) => {
 issuesRouter.patch("/:id", authMiddleware, async (req, res) => {
   try {
     const item = await prisma.issue.update({ where: { id: paramStr(req.params.id) }, data: req.body });
+    await syncPackageStatus(item.packageId);
     res.json(item);
   } catch (err) { console.error(err); res.status(500).json({ error: "Internal error" }); }
 });
