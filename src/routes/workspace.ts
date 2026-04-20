@@ -45,8 +45,13 @@ workspaceRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
     ]);
 
     const projectIds = [...scope.projectIds];
-    const packageIdList = [...scope.packageIds];
-    const pkgFilter = { packageId: { in: packageIdList } };
+    const readableIds = [...scope.packageIds];
+    const rollupIds = [...scope.rollupPackageIds];
+    // Counts aggregate across the full subtree below the user so a client's
+    // dashboard stays meaningful under one-level read visibility. Entity
+    // lists (recent activity) stay scoped to what the user may actually read.
+    const rollupFilter = { packageId: { in: rollupIds } };
+    const readableActivityFilter = { packageId: { in: readableIds } };
 
     const projects = await prisma.project.findMany({
       where: { id: { in: projectIds } },
@@ -54,19 +59,19 @@ workspaceRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
     });
 
     const [openIssues, pendingApprovals, inProgressPkgs, totalPackages, closedPackages, totalDocs, pkgByStatus, recentActivity] = await Promise.all([
-      prisma.issue.count({ where: { ...pkgFilter, NOT: { status: "Closed" } } }),
-      prisma.approval.count({ where: { ...pkgFilter, decision: "Pending" } }),
-      prisma.workPackage.count({ where: { id: { in: packageIdList }, status: "In Progress" } }),
-      prisma.workPackage.count({ where: { id: { in: packageIdList } } }),
-      prisma.workPackage.count({ where: { id: { in: packageIdList }, status: "Closed" } }),
-      prisma.document.count({ where: pkgFilter }),
+      prisma.issue.count({ where: { ...rollupFilter, NOT: { status: "Closed" } } }),
+      prisma.approval.count({ where: { ...rollupFilter, decision: "Pending" } }),
+      prisma.workPackage.count({ where: { id: { in: rollupIds }, status: "In Progress" } }),
+      prisma.workPackage.count({ where: { id: { in: rollupIds } } }),
+      prisma.workPackage.count({ where: { id: { in: rollupIds }, status: "Closed" } }),
+      prisma.document.count({ where: rollupFilter }),
       prisma.workPackage.groupBy({
         by: ["status"],
-        where: { id: { in: packageIdList } },
+        where: { id: { in: rollupIds } },
         _count: { id: true },
       }),
       prisma.activity.findMany({
-        where: { OR: [{ packageId: null }, pkgFilter] },
+        where: { OR: [{ packageId: null }, readableActivityFilter] },
         orderBy: { timestamp: "desc" },
         take: 20,
       }),

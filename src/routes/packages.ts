@@ -2,7 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { authMiddleware, type AuthRequest } from "../middleware/auth";
 import { queryStr, paramStr } from "../utils";
-import { getAccessScope } from "../access";
+import { getAccessScope, computePackageRollups } from "../access";
 
 export const packagesRouter = Router();
 
@@ -21,7 +21,8 @@ packagesRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
       },
       orderBy: { createdAt: "asc" },
     });
-    res.json(packages);
+    const rollups = await computePackageRollups(packages.map((p) => p.id));
+    res.json(packages.map((p) => ({ ...p, rollup: rollups.get(p.id) ?? null })));
   } catch (err) { console.error(err); res.status(500).json({ error: "Internal error" }); }
 });
 
@@ -32,7 +33,8 @@ packagesRouter.get("/:id", authMiddleware, async (req: AuthRequest, res) => {
     if (!scope.packageIds.has(id)) { res.status(403).json({ error: "Forbidden" }); return; }
     const pkg = await prisma.workPackage.findUnique({ where: { id } });
     if (!pkg) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(pkg);
+    const rollups = await computePackageRollups([id]);
+    res.json({ ...pkg, rollup: rollups.get(id) ?? null });
   } catch (err) { console.error(err); res.status(500).json({ error: "Internal error" }); }
 });
 
