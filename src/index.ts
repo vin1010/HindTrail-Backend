@@ -12,6 +12,7 @@ import { activityRouter } from "./routes/activity";
 import { membersRouter } from "./routes/members";
 import { workspaceRouter } from "./routes/workspace";
 import { commentsRouter } from "./routes/comments";
+import { contractorsRouter } from "./routes/contractors";
 
 dotenv.config();
 
@@ -124,6 +125,7 @@ app.use("/approvals", approvalsRouter);
 app.use("/activity", activityRouter);
 app.use("/members", membersRouter);
 app.use("/comments", commentsRouter);
+app.use("/contractors", contractorsRouter);
 
 app.listen(PORT, () => {
   console.log(`HindTrail API running on port ${PORT}`);

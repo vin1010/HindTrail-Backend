@@ -25,10 +25,14 @@ model User {
 }
 
 model Company {
-  id        String   @id @default(uuid())
-  name      String
-  type      String   @default("contractor")
-  createdAt DateTime @default(now())
+  id              String   @id @default(uuid())
+  name            String
+  type            String   @default("contractor")
+  parentCompanyId String?
+  createdAt       DateTime @default(now())
+
+  parent   Company?  @relation("CompanyChain", fields: [parentCompanyId], references: [id])
+  children Company[] @relation("CompanyChain")
 
   members    CompanyUser[]
   packages   WorkPackage[]
