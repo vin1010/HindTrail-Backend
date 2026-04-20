@@ -27,86 +27,158 @@ app.get("/", (_req, res) => {
   res.json({ status: "ok", service: "HindTrail API" });
 });
 
-// REMOVED: temp seed endpoint
-
-if (false) app.post("/admin/seed", async (req, res) => {
-  if (req.headers["x-seed-token"] !== "hindtrail-seed-2026") {
-    res.status(403).json({ error: "Forbidden" }); return;
+// Idempotent demo seed. Safe to call multiple times — creates client /
+// contractor / subcontractor accounts + a single three-tier Iron Crest
+// project so the live site has something credible to walk through.
+// Gated by DEMO_SEED_TOKEN (falls back to a fixed dev token).
+app.post("/admin/seed-demo", async (req, res) => {
+  const expected = process.env.DEMO_SEED_TOKEN || "hindtrail-seed-2026";
+  if (req.headers["x-seed-token"] !== expected) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
   }
   try {
     const { PrismaClient } = await import("@prisma/client");
     const p = new PrismaClient();
-    await p.activity.deleteMany(); await p.approval.deleteMany(); await p.issue.deleteMany();
-    await p.inspection.deleteMany(); await p.document.deleteMany(); await p.workPackage.deleteMany();
-    await p.project.deleteMany(); await p.companyUser.deleteMany(); await p.userLastContext.deleteMany();
-    await p.company.deleteMany(); await p.user.deleteMany();
 
-    const u1 = await p.user.create({ data: { email: "vindy@roteq.co.za", fullName: "Vindy Sharma" } });
-    const u2 = await p.user.create({ data: { email: "john@glencore.com", fullName: "John Smith" } });
-    const glencore = await p.company.create({ data: { name: "Glencore Ltd", type: "client" } });
-    const sasolOil = await p.company.create({ data: { name: "SasolOil", type: "client" } });
-    const roteq    = await p.company.create({ data: { name: "Roteq Engineering", type: "contractor" } });
-    const protech  = await p.company.create({ data: { name: "ProTech Solutions", type: "contractor" } });
-    const apex     = await p.company.create({ data: { name: "Apex Mechanical", type: "contractor" } });
-    const subA     = await p.company.create({ data: { name: "Sub-Engineering Solutions", type: "contractor" } });
-    const subB     = await p.company.create({ data: { name: "BoltWorks CC", type: "contractor" } });
-    const subC     = await p.company.create({ data: { name: "PipeSpec (Pty) Ltd", type: "contractor" } });
-    await p.companyUser.createMany({ data: [
-      { userId: u1.id, companyId: roteq.id,   role: "admin", status: "active" },
-      { userId: u2.id, companyId: glencore.id, role: "admin", status: "active" },
-    ]});
-    const proj1 = await p.project.create({ data: { name: "Refinery Turnaround 2026", code: "RT-2026", clientName: "Glencore", clientCompanyId: glencore.id, location: "Secunda, South Africa", startDate: "2026-04-15", endDate: "2026-08-30", status: "Active", description: "Major turnaround maintenance and equipment replacement." }});
-    const proj2 = await p.project.create({ data: { name: "Equipment Installation Phase 2", code: "EIP-2026", clientName: "SasolOil", clientCompanyId: sasolOil.id, location: "Sasolburg, South Africa", startDate: "2026-05-01", endDate: "2026-09-15", status: "Active", description: "Installation of new production equipment and automation systems." }});
+    const findOrCreateCompany = async (name: string, type: string) => {
+      const found = await p.company.findFirst({ where: { name } });
+      return found ?? p.company.create({ data: { name, type } });
+    };
+    const upsertUser = (email: string, fullName: string) =>
+      p.user.upsert({ where: { email }, update: {}, create: { email, fullName } });
+    const ensureMembership = (userId: string, companyId: string, role: string) =>
+      p.companyUser.upsert({
+        where: { userId_companyId: { userId, companyId } },
+        update: { role, status: "active" },
+        create: { userId, companyId, role, status: "active" },
+      });
+    const findOrCreateProject = async (code: string, data: any) => {
+      const found = await p.project.findFirst({ where: { code } });
+      return found ?? p.project.create({ data: { code, ...data } });
+    };
+    const findOrCreatePackage = async (code: string, data: any) => {
+      const found = await p.workPackage.findFirst({ where: { code } });
+      return found ?? p.workPackage.create({ data: { code, ...data } });
+    };
+    const ensureIssue = async (packageId: string, title: string, data: any) => {
+      const found = await p.issue.findFirst({ where: { packageId, title } });
+      if (!found) await p.issue.create({ data: { packageId, title, ...data } });
+    };
+    const ensureDoc = async (packageId: string, title: string, revision: string, data: any) => {
+      const found = await p.document.findFirst({ where: { packageId, title, revision } });
+      if (!found) await p.document.create({ data: { packageId, title, revision, ...data } });
+    };
+    const ensureApproval = async (packageId: string, objectLabel: string, data: any) => {
+      const found = await p.approval.findFirst({ where: { packageId, objectLabel } });
+      if (!found) await p.approval.create({ data: { packageId, objectLabel, ...data } });
+    };
+    const ensureInspection = async (packageId: string, type: string, data: any) => {
+      const found = await p.inspection.findFirst({ where: { packageId, type } });
+      if (!found) await p.inspection.create({ data: { packageId, type, ...data } });
+    };
 
-    const c1    = await p.workPackage.create({ data: { projectId: proj1.id, name: "Boiler System Overhaul",       code: "WP-BS-001",   ownerCompanyId: roteq.id,    ownerCompany: "Roteq Engineering",        responsible: "Vindy Sharma",  dueDate: "2026-06-30", status: "In Progress",      description: "Complete overhaul of boiler systems." }});
-    const c1s1  = await p.workPackage.create({ data: { projectId: proj1.id, parentId: c1.id,   name: "Boiler Tube Replacement",    code: "WP-BTR-001",  ownerCompanyId: subA.id,    ownerCompany: "Sub-Engineering Solutions", responsible: "Mike Nkosi",    dueDate: "2026-06-10", status: "Awaiting Approval", description: "Replace worn boiler tubes." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c1s1.id, name: "Flange Bolting & Torque",     code: "WP-FBT-001",  ownerCompanyId: subB.id,    ownerCompany: "BoltWorks CC",              responsible: "Dave Pretorius", dueDate: "2026-06-05", status: "Not Started",      description: "Torque all flange connections." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c1.id,   name: "Pressure Testing",           code: "WP-PT-001",   ownerCompanyId: subC.id,    ownerCompany: "PipeSpec (Pty) Ltd",        responsible: "Sara Dlamini",  dueDate: "2026-06-20", status: "Not Started",      description: "Hydrostatic pressure testing." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c1.id,   name: "Insulation Removal & Refit", code: "WP-INS-001",  ownerCompanyId: subB.id,    ownerCompany: "BoltWorks CC",              responsible: "Dave Pretorius", dueDate: "2026-06-25", status: "Not Started",      description: "Strip and refit thermal insulation." }});
+    const ironCrest = await findOrCreateCompany("Iron Crest Resources", "client");
+    const vertex = await findOrCreateCompany("Vertex Industrial Services", "contractor");
+    const subEng = await findOrCreateCompany("Sub-Engineering Solutions", "contractor");
 
-    const c2 = await p.workPackage.create({ data: { projectId: proj1.id, name: "Instrumentation Upgrade",    code: "WP-INST-001", ownerCompanyId: protech.id,  ownerCompany: "ProTech Solutions",        responsible: "Lena Fourie",   dueDate: "2026-07-15", status: "Not Started",      description: "Upgrade all field instruments." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c2.id, name: "Cable Tray Installation",    code: "WP-CTI-001",  ownerCompanyId: subA.id,    ownerCompany: "Sub-Engineering Solutions", responsible: "Mike Nkosi",    dueDate: "2026-07-05", status: "Not Started",      description: "Install cable trays." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c2.id, name: "Impulse Line Fabrication",   code: "WP-ILF-001",  ownerCompanyId: subC.id,    ownerCompany: "PipeSpec (Pty) Ltd",        responsible: "Sara Dlamini",  dueDate: "2026-07-10", status: "Not Started",      description: "Fabricate impulse lines." }});
+    const emma = await upsertUser("emma@ironcrest.com", "Emma Collins");
+    const michael = await upsertUser("michael@vertex.com", "Michael Reed");
+    const mike = await upsertUser("mike@sub-engineering.com", "Mike Nkosi");
 
-    const c3 = await p.workPackage.create({ data: { projectId: proj1.id, name: "Rotating Equipment Overhaul", code: "WP-REO-001", ownerCompanyId: apex.id,    ownerCompany: "Apex Mechanical",          responsible: "James Mokoena", dueDate: "2026-07-30", status: "In Progress",      description: "Overhaul all rotating equipment." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c3.id, name: "Pump Overhaul — Units 1-4",  code: "WP-PO-001",  ownerCompanyId: subA.id,    ownerCompany: "Sub-Engineering Solutions", responsible: "Mike Nkosi",    dueDate: "2026-07-15", status: "In Progress",      description: "Strip and rebuild pumps 1-4." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c3.id, name: "Coupling Alignment",         code: "WP-CA-001",  ownerCompanyId: subB.id,    ownerCompany: "BoltWorks CC",              responsible: "Dave Pretorius", dueDate: "2026-07-20", status: "Not Started",      description: "Laser alignment of couplings." }});
-    await p.workPackage.create({ data: { projectId: proj1.id, parentId: c3.id, name: "Lube Oil Line Flushing",     code: "WP-LOF-001", ownerCompanyId: subC.id,    ownerCompany: "PipeSpec (Pty) Ltd",        responsible: "Sara Dlamini",  dueDate: "2026-07-25", status: "Not Started",      description: "Flush and recommission lube oil systems." }});
+    await ensureMembership(emma.id, ironCrest.id, "admin");
+    await ensureMembership(michael.id, vertex.id, "admin");
+    await ensureMembership(mike.id, subEng.id, "admin");
 
-    const c4 = await p.workPackage.create({ data: { projectId: proj2.id, name: "Control System Installation",  code: "WP-CSI-001", ownerCompanyId: roteq.id,   ownerCompany: "Roteq Engineering",        responsible: "Vindy Sharma",  dueDate: "2026-07-20", status: "Not Started",      description: "Install and configure control systems." }});
-    await p.workPackage.create({ data: { projectId: proj2.id, parentId: c4.id, name: "PLC Panel Installation",     code: "WP-PLC-001", ownerCompanyId: subA.id,    ownerCompany: "Sub-Engineering Solutions", responsible: "Mike Nkosi",    dueDate: "2026-07-10", status: "Not Started",      description: "Mount and wire PLC panels." }});
-    await p.workPackage.create({ data: { projectId: proj2.id, parentId: c4.id, name: "Field Wiring & Terminations",code: "WP-FWT-001", ownerCompanyId: subB.id,    ownerCompany: "BoltWorks CC",              responsible: "Dave Pretorius", dueDate: "2026-07-15", status: "Not Started",      description: "Pull and terminate all field wiring." }});
+    const project = await findOrCreateProject("ICSD-DEMO", {
+      name: "Iron Crest Shutdown 2026 (Demo)",
+      clientName: "Iron Crest Resources",
+      clientCompanyId: ironCrest.id,
+      location: "Pilbara, Western Australia",
+      startDate: "2026-05-01",
+      endDate: "2026-05-12",
+      status: "Active",
+      description: "12-day planned shutdown. Mechanical, structural, reliability scopes.",
+    });
 
-    await p.document.createMany({ data: [
-      { packageId: c1.id,   title: "Boiler Inspection Report",   type: "Report",    revision: "Rev B", status: "Approved for Use", uploadedBy: "Vindy Sharma",  uploadDate: "2026-04-10", isCurrent: true,  notes: "All issues documented." },
-      { packageId: c1.id,   title: "Boiler Inspection Report",   type: "Report",    revision: "Rev A", status: "Superseded",       uploadedBy: "Vindy Sharma",  uploadDate: "2026-04-08", isCurrent: false, notes: "Draft." },
-      { packageId: c1s1.id, title: "Tube Replacement Procedure", type: "Procedure", revision: "Rev B", status: "Approved for Use", uploadedBy: "Mike Nkosi",    uploadDate: "2026-04-12", isCurrent: true,  notes: "Updated with safety requirements." },
-      { packageId: c2.id,   title: "Instrument Upgrade Spec",    type: "Drawing",   revision: "Rev 1", status: "Submitted",        uploadedBy: "Lena Fourie",   uploadDate: "2026-04-14", isCurrent: true,  notes: "Ready for review." },
-      { packageId: c3.id,   title: "Rotating Equipment ITP",     type: "Procedure", revision: "Rev A", status: "Approved for Use", uploadedBy: "James Mokoena", uploadDate: "2026-04-11", isCurrent: true,  notes: "ITP approved." },
-    ]});
-    await p.inspection.createMany({ data: [
-      { packageId: c1.id,   type: "Safety Inspection",    date: "2026-04-10", inspector: "Safety Officer", result: "Passed", notes: "All safety requirements met." },
-      { packageId: c1s1.id, type: "Quality Inspection",   date: "2026-04-13", inspector: "QA Manager",     result: "Open",   notes: "Pending material cert." },
-      { packageId: c3.id,   type: "Mechanical Inspection",date: "2026-04-15", inspector: "Lead Engineer",  result: "Open",   notes: "Awaiting bearing inspection." },
-    ]});
-    await p.issue.createMany({ data: [
-      { packageId: c1.id,   title: "Delayed tube delivery",          severity: "Major", owner: "Vindy Sharma",  dueDate: "2026-04-20", status: "Open", description: "Replacement tubes delayed." },
-      { packageId: c1s1.id, title: "Material certification pending", severity: "Minor", owner: "Mike Nkosi",    dueDate: "2026-04-25", status: "Open", description: "Awaiting third-party cert." },
-      { packageId: c3.id,   title: "Bearing lead time 6 weeks",      severity: "Major", owner: "James Mokoena", dueDate: "2026-04-30", status: "Open", description: "Bearings on back order." },
-    ]});
-    await p.approval.createMany({ data: [
-      { packageId: c1.id,   objectType: "Document",  objectLabel: "Boiler Inspection Report Rev B",  submittedBy: "Vindy Sharma",  submittedDate: "2026-04-10", approver: "John Smith", decision: "Approved", decisionDate: "2026-04-11", comments: "Approved." },
-      { packageId: c1s1.id, objectType: "Procedure", objectLabel: "Tube Replacement Procedure Rev B", submittedBy: "Mike Nkosi",    submittedDate: "2026-04-12", approver: "John Smith", decision: "Pending",  decisionDate: "", comments: "" },
-      { packageId: c3.id,   objectType: "Procedure", objectLabel: "Rotating Equipment ITP Rev A",    submittedBy: "James Mokoena", submittedDate: "2026-04-11", approver: "John Smith", decision: "Approved", decisionDate: "2026-04-12", comments: "ITP approved." },
-    ]});
-    await p.activity.createMany({ data: [
-      { packageId: c1.id,   userId: u1.id, user: "Vindy Sharma",  company: "Roteq Engineering", actionType: "Created",  objectType: "Work Package", objectLabel: "Boiler System Overhaul",         timestamp: new Date("2026-04-08") },
-      { packageId: c1.id,   userId: u2.id, user: "John Smith",    company: "Glencore Ltd",       actionType: "Approved", objectType: "Document",     objectLabel: "Boiler Inspection Report Rev B", timestamp: new Date("2026-04-11") },
-      { packageId: c1s1.id, userId: u1.id, user: "Vindy Sharma",  company: "Roteq Engineering", actionType: "Created",  objectType: "Sub-package",  objectLabel: "Boiler Tube Replacement",        timestamp: new Date("2026-04-09") },
-      { packageId: c3.id,   userId: u1.id, user: "James Mokoena", company: "Apex Mechanical",   actionType: "Created",  objectType: "Work Package", objectLabel: "Rotating Equipment Overhaul",    timestamp: new Date("2026-04-13") },
-    ]});
+    const root = await findOrCreatePackage("DEMO-SP417", {
+      projectId: project.id,
+      name: "Slurry Pump SP-417 Rebuild & Reinstall",
+      ownerCompanyId: vertex.id,
+      ownerCompany: vertex.name,
+      responsible: "Michael Reed",
+      dueDate: "2026-05-10",
+      status: "In Progress",
+      description: "Rebuild and reinstall slurry pump SP-417.",
+    });
+    const child = await findOrCreatePackage("DEMO-MR", {
+      projectId: project.id,
+      parentId: root.id,
+      name: "Mechanical Rebuild Package",
+      ownerCompanyId: subEng.id,
+      ownerCompany: subEng.name,
+      responsible: "Mike Nkosi",
+      dueDate: "2026-05-07",
+      status: "In Progress",
+      description: "Shaft, bearing, sleeve and casing rebuild.",
+    });
+    const grandchild = await findOrCreatePackage("DEMO-SSR", {
+      projectId: project.id,
+      parentId: child.id,
+      name: "Shaft Sleeve Restoration",
+      ownerCompanyId: subEng.id,
+      ownerCompany: subEng.name,
+      responsible: "Mike Nkosi",
+      dueDate: "2026-05-06",
+      status: "Not Started",
+      description: "Sleeve coating and dimensional restoration.",
+    });
+
+    // Rollup-worthy records on the hidden tiers so parent tiers still see
+    // meaningful counts (the whole point of the hybrid permission model).
+    await ensureIssue(child.id, "Bearing clearance out of spec", {
+      severity: "Major", owner: "Mike Nkosi", status: "Open",
+      description: "Outboard bearing running above tolerance.", dueDate: "2026-05-05",
+    });
+    await ensureIssue(grandchild.id, "Shaft scoring deeper than expected", {
+      severity: "Major", owner: "Mike Nkosi", status: "Open",
+      description: "Scoring exceeds OEM allowance.", dueDate: "2026-05-04",
+    });
+    await ensureApproval(child.id, "Rebuild Procedure Rev B", {
+      objectType: "Procedure", submittedBy: "Mike Nkosi",
+      submittedDate: "2026-04-20", approver: "Michael Reed", decision: "Pending",
+    });
+    await ensureApproval(grandchild.id, "Sleeve Restoration Method Rev A", {
+      objectType: "Procedure", submittedBy: "Mike Nkosi",
+      submittedDate: "2026-04-19", approver: "Michael Reed", decision: "Pending",
+    });
+    await ensureDoc(child.id, "Rebuild Procedure", "Rev B", {
+      type: "Procedure", status: "Approved for Use",
+      uploadedBy: "Mike Nkosi", uploadDate: "2026-04-18", isCurrent: true,
+    });
+    await ensureDoc(grandchild.id, "Sleeve Restoration Method", "Rev A", {
+      type: "Procedure", status: "Submitted",
+      uploadedBy: "Mike Nkosi", uploadDate: "2026-04-17", isCurrent: true,
+    });
+    await ensureInspection(child.id, "Pre-strip visual inspection", {
+      date: "2026-04-21", inspector: "Mike Nkosi", result: "Passed",
+      notes: "Leakage residue observed near gland area.",
+    });
+    await ensureInspection(grandchild.id, "Sleeve dimensional check", {
+      date: "2026-04-22", inspector: "Mike Nkosi", result: "Open",
+      notes: "Awaiting final coating.",
+    });
+
     await p.$disconnect();
-    res.json({ ok: true, message: "Database seeded successfully" });
+    res.json({
+      ok: true,
+      demoAccounts: [
+        { email: emma.email, role: "Client", company: ironCrest.name },
+        { email: michael.email, role: "Contractor", company: vertex.name },
+        { email: mike.email, role: "Subcontractor", company: subEng.name },
+      ],
+      projectCode: project.code,
+    });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: err.message });
