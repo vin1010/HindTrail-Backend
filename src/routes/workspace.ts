@@ -2,19 +2,21 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { authMiddleware, type AuthRequest } from "../middleware/auth";
 import { queryStr } from "../utils";
+import { getAccessScope } from "../access";
 
 export const workspaceRouter = Router();
 
-// Returns pending approvals for the given approver name or all, with package/project context
+// Returns pending approvals visible to the caller. Approver-name filter narrows further.
 workspaceRouter.get("/notifications", authMiddleware, async (req: AuthRequest, res) => {
   try {
+    const scope = await getAccessScope(req.userId!);
     const approverName = queryStr(req.query.approver);
-    const where = approverName
-      ? { decision: "Pending", approver: approverName }
-      : { decision: "Pending" };
-
     const pending = await prisma.approval.findMany({
-      where,
+      where: {
+        decision: "Pending",
+        packageId: { in: [...scope.packageIds] },
+        ...(approverName ? { approver: approverName } : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: 20,
       include: {
@@ -34,30 +36,44 @@ workspaceRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const companyId = req.query.companyId as string | undefined;
 
-    const memberships = await prisma.companyUser.findMany({
-      where: { userId, status: "active" },
-      include: { company: true },
+    const [memberships, scope] = await Promise.all([
+      prisma.companyUser.findMany({
+        where: { userId, status: "active" },
+        include: { company: true },
+      }),
+      getAccessScope(userId),
+    ]);
+
+    const projectIds = [...scope.projectIds];
+    const packageIdList = [...scope.packageIds];
+    const pkgFilter = { packageId: { in: packageIdList } };
+
+    const projects = await prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      orderBy: { createdAt: "desc" },
     });
 
-    const projects = await prisma.project.findMany({ orderBy: { createdAt: "desc" } });
-    const openIssues = await prisma.issue.count({ where: { NOT: { status: "Closed" } } });
-    const pendingApprovals = await prisma.approval.count({ where: { decision: "Pending" } });
-    const inProgressPkgs = await prisma.workPackage.count({ where: { status: "In Progress" } });
-
-    const [totalPackages, closedPackages, totalDocs, pkgByStatus] = await Promise.all([
-      prisma.workPackage.count(),
-      prisma.workPackage.count({ where: { status: "Closed" } }),
-      prisma.document.count(),
-      prisma.workPackage.groupBy({ by: ["status"], _count: { id: true } }),
+    const [openIssues, pendingApprovals, inProgressPkgs, totalPackages, closedPackages, totalDocs, pkgByStatus, recentActivity] = await Promise.all([
+      prisma.issue.count({ where: { ...pkgFilter, NOT: { status: "Closed" } } }),
+      prisma.approval.count({ where: { ...pkgFilter, decision: "Pending" } }),
+      prisma.workPackage.count({ where: { id: { in: packageIdList }, status: "In Progress" } }),
+      prisma.workPackage.count({ where: { id: { in: packageIdList } } }),
+      prisma.workPackage.count({ where: { id: { in: packageIdList }, status: "Closed" } }),
+      prisma.document.count({ where: pkgFilter }),
+      prisma.workPackage.groupBy({
+        by: ["status"],
+        where: { id: { in: packageIdList } },
+        _count: { id: true },
+      }),
+      prisma.activity.findMany({
+        where: { OR: [{ packageId: null }, pkgFilter] },
+        orderBy: { timestamp: "desc" },
+        take: 20,
+      }),
     ]);
     const packagesByStatus = Object.fromEntries(
       pkgByStatus.map((r: any) => [r.status, r._count.id])
     );
-
-    const recentActivity = await prisma.activity.findMany({
-      orderBy: { timestamp: "desc" },
-      take: 20,
-    });
 
     res.json({
       activeCompanyId: companyId || memberships[0]?.companyId || null,
