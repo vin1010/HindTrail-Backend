@@ -228,6 +228,7 @@ model Comment {
   packageId String
   userId    String
   text      String
+  mentions  String[] @default([])
   createdAt DateTime @default(now())
 
   package WorkPackage @relation(fields: [packageId], references: [id])
