@@ -69,7 +69,12 @@ app.post("/admin/seed-demo", async (req, res) => {
     };
     const ensureDoc = async (packageId: string, title: string, revision: string, data: any) => {
       const found = await p.document.findFirst({ where: { packageId, title, revision } });
-      if (!found) await p.document.create({ data: { packageId, title, revision, ...data } });
+      if (!found) {
+        await p.document.create({ data: { packageId, title, revision, ...data } });
+      } else if (data.fileUrl && !found.fileUrl) {
+        // Backfill fileUrl on previously-seeded rows so the demo links work.
+        await p.document.update({ where: { id: found.id }, data: { fileUrl: data.fileUrl } });
+      }
     };
     const ensureApproval = async (packageId: string, objectLabel: string, data: any) => {
       const found = await p.approval.findFirst({ where: { packageId, objectLabel } });
@@ -230,30 +235,38 @@ app.post("/admin/seed-demo", async (req, res) => {
     });
 
     // ── Documents (currently-issued drawings & procedures) ─────────────
+    // Public sample PDFs so download links work in the demo even before
+    // Cloudinary is configured. Replace with real uploads when credentialed.
+    const SAMPLE_PDF = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
     await ensureDoc(civilNode.id, "IFC Civil Drawings Pack", "Rev B", {
       type: "Drawing", status: "Approved for Use",
       uploadedBy: "Ethan Miller", uploadDate: "2026-01-18", isCurrent: true,
       notes: "Updated layout; client comments incorporated.",
+      fileUrl: SAMPLE_PDF,
     });
     await ensureDoc(civilNode.id, "IFC Civil Drawings Pack", "Rev A", {
       type: "Drawing", status: "Superseded",
       uploadedBy: "Ethan Miller", uploadDate: "2026-01-05", isCurrent: false,
       notes: "Initial issue.",
+      fileUrl: SAMPLE_PDF,
     });
     await ensureDoc(elecNode.id, "ITP — Electrical Cable Works", "Rev B", {
       type: "Procedure", status: "Issued",
       uploadedBy: "Ibrahim Khan", uploadDate: "2026-01-18", isCurrent: true,
       notes: "Inspection test plan for cable pulls and terminations.",
+      fileUrl: SAMPLE_PDF,
     });
     await ensureDoc(liftNode.id, "Lift Plan — MCC Skid", "Rev A", {
       type: "Procedure", status: "Approved for Use",
       uploadedBy: "Chloe King", uploadDate: "2026-01-05", isCurrent: true,
       notes: "Approved critical lift plan.",
+      fileUrl: SAMPLE_PDF,
     });
     await ensureDoc(mechNode.id, "Hydrotest Pack — Line C1", "Rev A", {
       type: "Procedure", status: "Draft",
       uploadedBy: "Jack Evans", uploadDate: "2026-01-12", isCurrent: true,
       notes: "Pending client review.",
+      fileUrl: SAMPLE_PDF,
     });
 
     // ── Inspections ────────────────────────────────────────────────────
