@@ -88,6 +88,10 @@ app.post("/admin/seed-demo", async (req, res) => {
         await p.inspection.update({ where: { id: found.id }, data: { evidencePhotos: data.evidencePhotos } });
       }
     };
+    const ensureMember = async (packageId: string, name: string, email: string, company: string, role: string) => {
+      const found = await p.packageMember.findFirst({ where: { packageId, email } });
+      if (!found) await p.packageMember.create({ data: { packageId, name, email, company, role } });
+    };
     const ensureComment = async (packageId: string, userId: string, text: string, createdAt: Date) => {
       const found = await p.comment.findFirst({ where: { packageId, userId, text } });
       if (!found) await p.comment.create({ data: { packageId, userId, text, createdAt } });
@@ -304,6 +308,42 @@ app.post("/admin/seed-demo", async (req, res) => {
       evidencePhotos: [PHOTO("mat-receive-1"), PHOTO("mat-receive-2")],
     });
 
+    // ── Package members (so the @mention picker has real names) ────────
+    const memberGrants: Array<[string, { name: string; email: string; company: string; role: string }]> = [
+      // Civil root — IronBuild team + client oversight
+      [civilNode.id, { name: "Ethan Miller", email: ethan.email, company: ironBuild.name, role: "Owner" }],
+      [civilNode.id, { name: "Kiran Rao", email: kiran.email, company: ironBuild.name, role: "Contributor" }],
+      [civilNode.id, { name: "Hannah Jones", email: hannah.email, company: ironBuild.name, role: "Contributor" }],
+      [civilNode.id, { name: "Asha Verma", email: asha.email, company: acme.name, role: "Approver" }],
+      [civilNode.id, { name: "Priya Nair", email: priya.email, company: acme.name, role: "Approver" }],
+      // Electrical root — VoltEdge team + client oversight
+      [elecNode.id, { name: "Ravi Sharma", email: ravi.email, company: voltEdge.name, role: "Owner" }],
+      [elecNode.id, { name: "Ibrahim Khan", email: ibrahim.email, company: voltEdge.name, role: "Contributor" }],
+      [elecNode.id, { name: "Asha Verma", email: asha.email, company: acme.name, role: "Approver" }],
+      [elecNode.id, { name: "Priya Nair", email: priya.email, company: acme.name, role: "Approver" }],
+      // Piping root — PipePro team + client oversight
+      [mechNode.id, { name: "Jack Evans", email: jack.email, company: pipePro.name, role: "Owner" }],
+      [mechNode.id, { name: "Luke Walker", email: luke.email, company: pipePro.name, role: "Contributor" }],
+      [mechNode.id, { name: "Asha Verma", email: asha.email, company: acme.name, role: "Approver" }],
+      [mechNode.id, { name: "Priya Nair", email: priya.email, company: acme.name, role: "Approver" }],
+      // Scaffolding (sub) — SkyScaff + parent contractor
+      [scaffNode.id, { name: "Dylan Scott", email: dylan.email, company: skyScaff.name, role: "Owner" }],
+      [scaffNode.id, { name: "Ethan Miller", email: ethan.email, company: ironBuild.name, role: "Approver" }],
+      // Heavy Lifts (sub) — LiftSafe + VoltEdge oversight + client witness
+      [liftNode.id, { name: "Chloe King", email: chloe.email, company: liftSafe.name, role: "Owner" }],
+      [liftNode.id, { name: "Ravi Sharma", email: ravi.email, company: voltEdge.name, role: "Approver" }],
+      [liftNode.id, { name: "Priya Nair", email: priya.email, company: acme.name, role: "Approver" }],
+      // Welding (sub-sub) — WeldRight + SkyScaff oversight
+      [weldNode.id, { name: "Wei Zhang", email: wei.email, company: weldRight.name, role: "Owner" }],
+      [weldNode.id, { name: "Dylan Scott", email: dylan.email, company: skyScaff.name, role: "Approver" }],
+      // Cable QA (sub-sub) — CableTag + LiftSafe oversight
+      [qaNode.id, { name: "Anika Das", email: anika.email, company: cableTag.name, role: "Owner" }],
+      [qaNode.id, { name: "Chloe King", email: chloe.email, company: liftSafe.name, role: "Approver" }],
+    ];
+    for (const [packageId, m] of memberGrants) {
+      await ensureMember(packageId, m.name, m.email, m.company, m.role);
+    }
+
     // ── Issues (mapped from xlsx) ──────────────────────────────────────
     await ensureIssue(qaNode.id, "Weather impacts workfront", {
       severity: "Major", owner: "Anika Das", status: "Open",
@@ -420,6 +460,7 @@ app.post("/admin/seed-demo", async (req, res) => {
         issues: 8,
         approvals: 4,
         comments: 9,
+        members: memberGrants.length,
       },
       loginAccounts: [
         { email: asha.email, role: "Client PM", company: acme.name },
