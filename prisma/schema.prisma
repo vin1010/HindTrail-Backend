@@ -139,15 +139,16 @@ model Document {
 }
 
 model Inspection {
-  id          String   @id @default(uuid())
-  packageId   String
-  type        String
-  linkedDocId String?
-  date        String
-  inspector   String
-  result      String   @default("Open")
-  notes       String   @default("")
-  createdAt   DateTime @default(now())
+  id              String   @id @default(uuid())
+  packageId       String
+  type            String
+  linkedDocId     String?
+  date            String
+  inspector       String
+  result          String   @default("Open")
+  notes           String   @default("")
+  evidencePhotos  String[] @default([])
+  createdAt       DateTime @default(now())
 
   package WorkPackage @relation(fields: [packageId], references: [id])
 

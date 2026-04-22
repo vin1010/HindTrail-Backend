@@ -82,7 +82,11 @@ app.post("/admin/seed-demo", async (req, res) => {
     };
     const ensureInspection = async (packageId: string, type: string, data: any) => {
       const found = await p.inspection.findFirst({ where: { packageId, type } });
-      if (!found) await p.inspection.create({ data: { packageId, type, ...data } });
+      if (!found) {
+        await p.inspection.create({ data: { packageId, type, ...data } });
+      } else if (data.evidencePhotos?.length && (!found.evidencePhotos || found.evidencePhotos.length === 0)) {
+        await p.inspection.update({ where: { id: found.id }, data: { evidencePhotos: data.evidencePhotos } });
+      }
     };
     const ensureComment = async (packageId: string, userId: string, text: string, createdAt: Date) => {
       const found = await p.comment.findFirst({ where: { packageId, userId, text } });
@@ -270,25 +274,34 @@ app.post("/admin/seed-demo", async (req, res) => {
     });
 
     // ── Inspections ────────────────────────────────────────────────────
+    // Stable public placeholders so the inspection cards always show photo
+    // thumbnails even before the customer points their own Cloudinary at it.
+    const PHOTO = (seed: string) => `https://picsum.photos/seed/${seed}/600/400`;
+
     await ensureInspection(civilNode.id, "Concrete Pour Inspection", {
       date: "2025-11-29", inspector: "Kiran Rao", result: "Passed",
       notes: "Hold point satisfied with client witness.",
+      evidencePhotos: [PHOTO("concrete-pour-1"), PHOTO("concrete-pour-2"), PHOTO("concrete-pour-3")],
     });
     await ensureInspection(scaffNode.id, "Scaffold Handover / Tag", {
       date: "2025-12-10", inspector: "Dylan Scott", result: "Passed",
       notes: "Minor observations recorded.",
+      evidencePhotos: [PHOTO("scaffold-tag-1"), PHOTO("scaffold-tag-2")],
     });
     await ensureInspection(elecNode.id, "Tray Supports Inspection", {
       date: "2025-12-19", inspector: "Ibrahim Khan", result: "Passed",
       notes: "Hold point satisfied with client witness.",
+      evidencePhotos: [PHOTO("tray-supports-1")],
     });
     await ensureInspection(liftNode.id, "Critical Lift Witness", {
       date: "2026-01-15", inspector: "Priya Nair", result: "Passed",
       notes: "All checks passed. Lift proceeded under Chloe King.",
+      evidencePhotos: [PHOTO("critical-lift-1"), PHOTO("critical-lift-2"), PHOTO("critical-lift-3"), PHOTO("critical-lift-4")],
     });
     await ensureInspection(mechNode.id, "Materials Receiving Inspection", {
       date: "2025-12-15", inspector: "Luke Walker", result: "Failed",
       notes: "Packing list mismatch; QA docs incomplete for 2 spools.",
+      evidencePhotos: [PHOTO("mat-receive-1"), PHOTO("mat-receive-2")],
     });
 
     // ── Issues (mapped from xlsx) ──────────────────────────────────────
